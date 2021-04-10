@@ -1,635 +1,175 @@
-// //////////////////////////////////////////////////////////
-// sha256.cpp
-// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.
-// see http://create.stephan-brumme.com/disclaimer.html
-//
-
+#include <cstring>
+#include <fstream>
 #include "sha256.h"
 
-// big endian architectures need #define __BYTE_ORDER __BIG_ENDIAN
-#ifndef _MSC_VER
-//#include <endian.h>
-#endif
+/*
+ * Updated to C++, zedwood.com 2012
+ * Based on Olivier Gay's version
+ * See Modified BSD License below: 
+ *
+ * FIPS 180-2 SHA-224/256/384/512 implementation
+ * Issue date:  04/30/2005
+ * http://www.ouah.org/ogay/sha2/
+ *
+ * Copyright (C) 2005, 2007 Olivier Gay <olivier.gay@a3.epfl.ch>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the project nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
-/// same as reset()
-SHA256::SHA256()
+const unsigned int SHA256::sha256_k[64] = //UL = uint32
+    {0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+     0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+     0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+     0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+     0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+     0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+     0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+     0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+void SHA256::transform(const unsigned char *message, unsigned int block_nb)
 {
-    reset();
-}
-
-/// restart
-void SHA256::reset()
-{
-    m_numBytes = 0;
-    m_bufferSize = 0;
-
-    // according to RFC 1321
-    m_hash[0] = 0x6a09e667;
-    m_hash[1] = 0xbb67ae85;
-    m_hash[2] = 0x3c6ef372;
-    m_hash[3] = 0xa54ff53a;
-    m_hash[4] = 0x510e527f;
-    m_hash[5] = 0x9b05688c;
-    m_hash[6] = 0x1f83d9ab;
-    m_hash[7] = 0x5be0cd19;
-}
-
-namespace
-{
-    inline uint32_t rotate(uint32_t a, uint32_t c)
-    {
-        return (a >> c) | (a << (32 - c));
-    }
-
-    inline uint32_t swap(uint32_t x)
-    {
-#if defined(__GNUC__) || defined(__clang__)
-        return __builtin_bswap32(x);
-#elif _MSC_VER
-        return _byteswap_ulong(x);
-#endif
-
-        return (x >> 24) |
-               ((x >> 8) & 0x0000FF00) |
-               ((x << 8) & 0x00FF0000) |
-               (x << 24);
-    }
-
-    // mix functions for processBlock()
-    inline uint32_t f1(uint32_t e, uint32_t f, uint32_t g)
-    {
-        uint32_t term1 = rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25);
-        uint32_t term2 = (e & f) ^ (~e & g); //(g ^ (e & (f ^ g)))
-        return term1 + term2;
-    }
-
-    inline uint32_t f2(uint32_t a, uint32_t b, uint32_t c)
-    {
-        uint32_t term1 = rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22);
-        uint32_t term2 = ((a | b) & c) | (a & b); //(a & (b ^ c)) ^ (b & c);
-        return term1 + term2;
-    }
-}
-
-/// process 64 bytes
-void SHA256::processBlock(const void *data)
-{
-    // get last hash
-    uint32_t a = m_hash[0];
-    uint32_t b = m_hash[1];
-    uint32_t c = m_hash[2];
-    uint32_t d = m_hash[3];
-    uint32_t e = m_hash[4];
-    uint32_t f = m_hash[5];
-    uint32_t g = m_hash[6];
-    uint32_t h = m_hash[7];
-
-    // data represented as 16x 32-bit words
-    const auto *input = reinterpret_cast<const uint32_t *>(data);
-
-    // convert to big endian
-    std::array<uint32_t, BlockSize> words;
-
+    uint32 w[64];
+    uint32 wv[8];
+    uint32 t1, t2;
+    const unsigned char *sub_block;
     int i;
-    for (i = 0; i < 16; i++)
-#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-        words[i] = input[i];
-#else
-        words[i] = swap(input[i]);
-#endif
-
-    uint32_t x, y; // temporaries
-
-    // first round
-    x = h + f1(e, f, g) + 0x428a2f98 + words[0];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0x71374491 + words[1];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0xb5c0fbcf + words[2];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0xe9b5dba5 + words[3];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x3956c25b + words[4];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0x59f111f1 + words[5];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x923f82a4 + words[6];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0xab1c5ed5 + words[7];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // secound round
-    x = h + f1(e, f, g) + 0xd807aa98 + words[8];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0x12835b01 + words[9];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0x243185be + words[10];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0x550c7dc3 + words[11];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x72be5d74 + words[12];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0x80deb1fe + words[13];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x9bdc06a7 + words[14];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0xc19bf174 + words[15];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 24 words
-    for (; i < 24; i++)
+    int j;
+    for (i = 0; i < (int)block_nb; i++)
     {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // third round
-    x = h + f1(e, f, g) + 0xe49b69c1 + words[16];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0xefbe4786 + words[17];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0x0fc19dc6 + words[18];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0x240ca1cc + words[19];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x2de92c6f + words[20];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0x4a7484aa + words[21];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x5cb0a9dc + words[22];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0x76f988da + words[23];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 32 words
-    for (; i < 32; i++)
-    {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // fourth round
-    x = h + f1(e, f, g) + 0x983e5152 + words[24];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0xa831c66d + words[25];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0xb00327c8 + words[26];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0xbf597fc7 + words[27];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0xc6e00bf3 + words[28];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0xd5a79147 + words[29];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x06ca6351 + words[30];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0x14292967 + words[31];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 40 words
-    for (; i < 40; i++)
-    {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // fifth round
-    x = h + f1(e, f, g) + 0x27b70a85 + words[32];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0x2e1b2138 + words[33];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0x4d2c6dfc + words[34];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0x53380d13 + words[35];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x650a7354 + words[36];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0x766a0abb + words[37];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x81c2c92e + words[38];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0x92722c85 + words[39];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 48 words
-    for (; i < 48; i++)
-    {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // sixth round
-    x = h + f1(e, f, g) + 0xa2bfe8a1 + words[40];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0xa81a664b + words[41];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0xc24b8b70 + words[42];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0xc76c51a3 + words[43];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0xd192e819 + words[44];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0xd6990624 + words[45];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0xf40e3585 + words[46];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0x106aa070 + words[47];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 56 words
-    for (; i < 56; i++)
-    {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // seventh round
-    x = h + f1(e, f, g) + 0x19a4c116 + words[48];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0x1e376c08 + words[49];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0x2748774c + words[50];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0x34b0bcb5 + words[51];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x391c0cb3 + words[52];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0x4ed8aa4a + words[53];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0x5b9cca4f + words[54];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0x682e6ff3 + words[55];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // extend to 64 words
-    for (; i < 64; i++)
-    {
-        words[i] = words[i - 16] +
-                   (rotate(words[i - 15], 7) ^ rotate(words[i - 15], 18) ^ (words[i - 15] >> 3)) +
-                   words[i - 7] +
-                   (rotate(words[i - 2], 17) ^ rotate(words[i - 2], 19) ^ (words[i - 2] >> 10));
-    }
-
-    // eighth round
-    x = h + f1(e, f, g) + 0x748f82ee + words[56];
-    y = f2(a, b, c);
-    d += x;
-    h = x + y;
-    x = g + f1(d, e, f) + 0x78a5636f + words[57];
-    y = f2(h, a, b);
-    c += x;
-    g = x + y;
-    x = f + f1(c, d, e) + 0x84c87814 + words[58];
-    y = f2(g, h, a);
-    b += x;
-    f = x + y;
-    x = e + f1(b, c, d) + 0x8cc70208 + words[59];
-    y = f2(f, g, h);
-    a += x;
-    e = x + y;
-    x = d + f1(a, b, c) + 0x90befffa + words[60];
-    y = f2(e, f, g);
-    h += x;
-    d = x + y;
-    x = c + f1(h, a, b) + 0xa4506ceb + words[61];
-    y = f2(d, e, f);
-    g += x;
-    c = x + y;
-    x = b + f1(g, h, a) + 0xbef9a3f7 + words[62];
-    y = f2(c, d, e);
-    f += x;
-    b = x + y;
-    x = a + f1(f, g, h) + 0xc67178f2 + words[63];
-    y = f2(b, c, d);
-    e += x;
-    a = x + y;
-
-    // update hash
-    m_hash[0] += a;
-    m_hash[1] += b;
-    m_hash[2] += c;
-    m_hash[3] += d;
-    m_hash[4] += e;
-    m_hash[5] += f;
-    m_hash[6] += g;
-    m_hash[7] += h;
-}
-
-/// add arbitrary number of bytes
-void SHA256::add(const void *data, size_t numBytes)
-{
-    auto *current = reinterpret_cast<const uint8_t *>(data);
-
-    if (m_bufferSize > 0)
-    {
-        while (numBytes > 0 && m_bufferSize < BlockSize)
+        sub_block = message + (i << 6);
+        for (j = 0; j < 16; j++)
         {
-            m_buffer[m_bufferSize++] = *current++;
-            numBytes--;
+            SHA2_PACK32(&sub_block[j << 2], &w[j]);
+        }
+        for (j = 16; j < 64; j++)
+        {
+            w[j] = SHA256_F4(w[j - 2]) + w[j - 7] + SHA256_F3(w[j - 15]) + w[j - 16];
+        }
+        for (j = 0; j < 8; j++)
+        {
+            wv[j] = m_h[j];
+        }
+        for (j = 0; j < 64; j++)
+        {
+            t1 = wv[7] + SHA256_F2(wv[4]) + SHA2_CH(wv[4], wv[5], wv[6]) + sha256_k[j] + w[j];
+            t2 = SHA256_F1(wv[0]) + SHA2_MAJ(wv[0], wv[1], wv[2]);
+            wv[7] = wv[6];
+            wv[6] = wv[5];
+            wv[5] = wv[4];
+            wv[4] = wv[3] + t1;
+            wv[3] = wv[2];
+            wv[2] = wv[1];
+            wv[1] = wv[0];
+            wv[0] = t1 + t2;
+        }
+        for (j = 0; j < 8; j++)
+        {
+            m_h[j] += wv[j];
         }
     }
+}
 
-    // full buffer
-    if (m_bufferSize == BlockSize)
-    {
-        processBlock(m_buffer.data());
-        m_numBytes += BlockSize;
-        m_bufferSize = 0;
-    }
+void SHA256::init()
+{
+    m_h[0] = 0x6a09e667;
+    m_h[1] = 0xbb67ae85;
+    m_h[2] = 0x3c6ef372;
+    m_h[3] = 0xa54ff53a;
+    m_h[4] = 0x510e527f;
+    m_h[5] = 0x9b05688c;
+    m_h[6] = 0x1f83d9ab;
+    m_h[7] = 0x5be0cd19;
+    m_len = 0;
+    m_tot_len = 0;
+}
 
-    // no more data ?
-    if (numBytes == 0)
+void SHA256::update(const unsigned char *message, unsigned int len)
+{
+    unsigned int block_nb;
+    unsigned int new_len, rem_len, tmp_len;
+    const unsigned char *shifted_message;
+    tmp_len = SHA224_256_BLOCK_SIZE - m_len;
+    rem_len = len < tmp_len ? len : tmp_len;
+    memcpy(&m_block[m_len], message, rem_len);
+    if (m_len + len < SHA224_256_BLOCK_SIZE)
     {
+        m_len += len;
         return;
     }
+    new_len = len - rem_len;
+    block_nb = new_len / SHA224_256_BLOCK_SIZE;
+    shifted_message = message + rem_len;
+    transform(m_block, 1);
+    transform(shifted_message, block_nb);
+    rem_len = new_len % SHA224_256_BLOCK_SIZE;
+    memcpy(m_block, &shifted_message[block_nb << 6], rem_len);
+    m_len = rem_len;
+    m_tot_len += (block_nb + 1) << 6;
+}
 
-    // process full blocks
-    while (numBytes >= BlockSize)
+void SHA256::final(unsigned char *digest)
+{
+    unsigned int block_nb;
+    unsigned int pm_len;
+    unsigned int len_b;
+    int i;
+    block_nb = (1 + ((SHA224_256_BLOCK_SIZE - 9) < (m_len % SHA224_256_BLOCK_SIZE)));
+    len_b = (m_tot_len + m_len) << 3;
+    pm_len = block_nb << 6;
+    memset(m_block + m_len, 0, pm_len - m_len);
+    m_block[m_len] = 0x80;
+    SHA2_UNPACK32(len_b, m_block + pm_len - 4);
+    transform(m_block, block_nb);
+    for (i = 0; i < 8; i++)
     {
-        processBlock(current);
-        current += BlockSize;
-        m_numBytes += BlockSize;
-        numBytes -= BlockSize;
-    }
-
-    // keep remaining bytes in buffer
-    while (numBytes > 0)
-    {
-        m_buffer[m_bufferSize++] = *current++;
-        numBytes--;
+        SHA2_UNPACK32(m_h[i], &digest[i << 2]);
     }
 }
 
-/// process final block, less than 64 bytes
-void SHA256::processBuffer()
+std::string sha256(std::string input)
 {
-    // the input bytes are considered as bits strings, where the first bit is the most significant bit of the byte
+    unsigned char digest[SHA256::DIGEST_SIZE];
+    memset(digest, 0, SHA256::DIGEST_SIZE);
 
-    // - append "1" bit to message
-    // - append "0" bits until message length in bit mod 512 is 448
-    // - append length as 64 bit integer
+    SHA256 ctx = SHA256();
+    ctx.init();
+    ctx.update((unsigned char *)input.c_str(), input.length());
+    ctx.final(digest);
 
-    // number of bits
-    size_t paddedLength = m_bufferSize * 8;
-
-    // plus one bit set to 1 (always appended)
-    paddedLength++;
-
-    // number of bits must be (numBits % 512) = 448
-    size_t lower11Bits = paddedLength & 511;
-    if (lower11Bits <= 448)
-    {
-        paddedLength += 448 - lower11Bits;
-    }
-    else
-    {
-        paddedLength += 512 + 448 - lower11Bits;
-    }
-
-    // convert from bits to bytes
-    paddedLength /= 8;
-
-    // only needed if additional data flows over into a second block
-    unsigned char extra[BlockSize];
-
-    // append a "1" bit, 128 => binary 10000000
-    if (m_bufferSize < BlockSize)
-    {
-        m_buffer[m_bufferSize] = 128;
-    }
-    else
-    {
-        extra[0] = 128;
-    }
-
-    size_t i;
-    for (i = m_bufferSize + 1; i < BlockSize; i++)
-    {
-        m_buffer[i] = 0;
-    }
-
-    for (; i < paddedLength; i++)
-    {
-        extra[i - BlockSize] = 0;
-    }
-
-    // add message length in bits as 64 bit number
-    uint64_t msgBits = 8 * (m_numBytes + m_bufferSize);
-
-    // find right position
-    unsigned char *addLength;
-    if (paddedLength < BlockSize)
-    {
-        addLength = m_buffer.data() + paddedLength;
-    }
-    else
-    {
-        addLength = extra + paddedLength - BlockSize;
-    }
-
-    // must be big endian
-    *addLength++ = (unsigned char)((msgBits >> 56) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 48) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 40) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 32) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 24) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 16) & 0xFF);
-    *addLength++ = (unsigned char)((msgBits >> 8) & 0xFF);
-    *addLength = (unsigned char)(msgBits & 0xFF);
-
-    // process blocks
-    processBlock(m_buffer.data());
-
-    // flowed over into a second block ?
-    if (paddedLength > BlockSize)
-    {
-        processBlock(extra);
-    }
-}
-
-/// return latest hash as 64 hex characters
-std::string SHA256::getHashString()
-{
-    // compute hash (as raw bytes)
-    auto rawHash = getHashBytes();
-
-    // convert to hex string
-    std::string result;
-    result.reserve(2 * HashBytes);
-    for (size_t i = 0; i < HashBytes; i++)
-    {
-        static const char dec2hex[16 + 1] = "0123456789abcdef";
-        result += dec2hex[(rawHash[i] >> 4) & 15];
-        result += dec2hex[rawHash[i] & 15];
-    }
-
-    return result;
-}
-
-/// return latest hash as bytes
-std::array<uint8_t, SHA256::HashBytes> SHA256::getHashBytes()
-{
-    std::array<uint8_t, SHA256::HashBytes> current;
-
-    // save old hash if buffer is partially filled
-    std::array<uint32_t, HashValues> oldHash;
-    for (size_t i = 0; i < HashValues; i++)
-    {
-        oldHash[i] = m_hash[i];
-    }
-
-    // process remaining bytes
-    processBuffer();
-
-    int j = 0;
-    for (size_t i = 0; i < HashValues; i++)
-    {
-        current[j++] = (m_hash[i] >> 24) & 0xFF;
-        current[j++] = (m_hash[i] >> 16) & 0xFF;
-        current[j++] = (m_hash[i] >> 8) & 0xFF;
-        current[j++] = m_hash[i] & 0xFF;
-
-        // restore old hash
-        m_hash[i] = oldHash[i];
-    }
-
-    return current;
-}
-
-/// compute SHA256 of a memory block
-std::string SHA256::operator()(const void *data, size_t numBytes)
-{
-    reset();
-    add(data, numBytes);
-    return getHashString();
-}
-
-/// compute SHA256 of a string, excluding final zero
-std::string SHA256::operator()(const std::string &text)
-{
-    reset();
-    add(text.c_str(), text.size());
-    return getHashString();
+    char buf[2 * SHA256::DIGEST_SIZE + 1];
+    buf[2 * SHA256::DIGEST_SIZE] = 0;
+    for (int i = 0; i < SHA256::DIGEST_SIZE; i++)
+        sprintf(buf + i * 2, "%02x", digest[i]);
+    return std::string(buf);
 }
