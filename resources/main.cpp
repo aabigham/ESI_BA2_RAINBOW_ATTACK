@@ -42,6 +42,6 @@ std::string reduce(std::string hash, unsigned index, unsigned passwdSize)
     }
 
     int number = (int)strtol(hash.c_str(), NULL, 16);
-    reducedPwd.push_back(chars[(number + index) % passwdSize]);
+    reducedPwd.push_back(::chars[(number + index) % passwdSize]);
     return;
 }
