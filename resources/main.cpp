@@ -1,12 +1,15 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+
 #include "sha256.h"
+
 std::string reduce(std::string hash, unsigned index, unsigned passwdSize);
+
 int main(int argc, char const *argv[])
 {
-    std::ifstream filez{argv[1]};
-    if (filez.fail())
+    std::ifstream fin{argv[1]};
+    if (fin.fail())
     {
         std::cerr << "File could not be opened\n";
         return -1;
@@ -14,7 +17,7 @@ int main(int argc, char const *argv[])
     std::vector<std::pair<std::string, std::string>> data{};
     std::string currPassword;
 
-    while (std::getline(filez, currPassword))
+    while (std::getline(fin, currPassword))
     {
         std::string tail;
         for (size_t i = 0; i < 50000; i++)
@@ -23,6 +26,7 @@ int main(int argc, char const *argv[])
     }
     return 0;
 }
+
 std::string reduce(std::string hash, unsigned index, unsigned passwdSize)
 {
     std::string reducedPwd;
@@ -35,7 +39,7 @@ std::string reduce(std::string hash, unsigned index, unsigned passwdSize)
         /* code */
     }
 
-    int number = (int)strtol(hash, NULL, 16);
+    int number = (int)strtol(hash.c_str(), NULL, 16);
     reducedPwd.push_back(chars[(number + index) % passwdSize]);
     return;
 }
