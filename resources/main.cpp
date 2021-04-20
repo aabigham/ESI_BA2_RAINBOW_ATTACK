@@ -4,6 +4,11 @@
 
 #include "sha256.h"
 
+constexpr static char *chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789";
+
 std::string reduce(std::string hash, unsigned index, unsigned passwdSize);
 
 int main(int argc, char const *argv[])
@@ -14,25 +19,22 @@ int main(int argc, char const *argv[])
         std::cerr << "File could not be opened\n";
         return -1;
     }
-    std::vector<std::pair<std::string, std::string>> data{};
-    std::string currPassword;
 
-    while (std::getline(fin, currPassword))
+    std::vector<std::pair<std::string, std::string>> datas{};
+    for (std::string currPassword; std::getline(fin, currPassword);)
     {
         std::string tail;
         for (size_t i = 0; i < 50000; i++)
         {
         }
     }
+
     return 0;
 }
 
 std::string reduce(std::string hash, unsigned index, unsigned passwdSize)
 {
     std::string reducedPwd;
-    const char *chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                        "abcdefghijklmnopqrstuvwxyz"
-                        "0123456789";
 
     for (unsigned i = 0; i < passwdSize; i++)
     {
