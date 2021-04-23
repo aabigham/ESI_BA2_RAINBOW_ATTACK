@@ -6,7 +6,7 @@
 
 #include "sha256.h"
 
-std::string reduce(const std::string &hash, int index, int passwdSize = 8);
+static std::string reduce(const std::string &hash, int index, int passwdSize = 8);
 void generateTable(std::ifstream &fin, std::ofstream &fout);
 
 int main(int argc, char const *argv[])
@@ -50,19 +50,21 @@ int main(int argc, char const *argv[])
         return -1;
     }
     bool found = false;
-    std::string matchingHash;
     std::string currHash;
     std::string rbLine;
     while (std::getline(fin_hashes, currHash) && std::getline(fin_rbtable, rbLine))
     {
-        std::string head{rbLine.substr(0, rbLine.find(","))};
-        std::string tail{rbLine.substr(1, rbLine.find(","))};
+        //std::string token = line.substr(0, pos);
+        std::string head{strtok(&*rbLine.begin(), ",")};
+        std::string tail{strtok(NULL, ",")};
         auto pwdSize = head.size();
-
         std::string tempHash = currHash;
         for (int i{0}; i < 50000 && !found; i++)
         {
             tempHash = reduce(tempHash, i, pwdSize);
+            std::cout << head << "," << tail << std::endl;
+
+            std::cout << tempHash << " vs " << tail << std::endl;
             //probleme de reduction
             //probleme nb  de mdp
             if (tempHash.compare(tail) == 0)
@@ -98,7 +100,7 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-std::string reduce(const std::string &hash, int index, int passwdSize)
+static std::string reduce(const std::string &hash, int index, int passwdSize)
 {
     static const char chars[]{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"};
     //
@@ -106,7 +108,7 @@ std::string reduce(const std::string &hash, int index, int passwdSize)
     int temp;
     for (int i = 0; i < 16; ++i)
     {
-        std::sscanf(hash.c_str() + 2 * i, "%02x", &temp);
+        std::sscanf(hash.c_str() + 2 * i, "%2x", &temp);
         bytes[i] = temp;
     }
     //
@@ -143,7 +145,7 @@ std::string reduce(const std::string &hash, int index, int passwdSize)
     }
 }*/
 
-/*std::string reduce(std::string hash, int index, int passwdSize)
+/*static std::string reduce(std::string hash, int index, int passwdSize)
 {
     static const char chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     std::string reducedPwd;
