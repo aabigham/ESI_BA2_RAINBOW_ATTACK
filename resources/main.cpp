@@ -6,7 +6,7 @@
 
 #include "sha256.h"
 
-static std::string reduce(const std::string &hash, int index, int passwdSize = 8);
+std::string reduce(const std::string &hash, int index, int passwdSize = 8);
 void generateTable(std::ifstream &fin, std::ofstream &fout);
 
 int main(int argc, char const *argv[])
@@ -52,7 +52,6 @@ int main(int argc, char const *argv[])
     bool found = false;
     std::string currHash;
     std::string rbLine;
-    while (std::getline(fin_hashes, currHash) && std::getline(fin_rbtable, rbLine))
     {
         //std::string token = line.substr(0, pos);
         std::string head{strtok(&*rbLine.begin(), ",")};
@@ -62,9 +61,9 @@ int main(int argc, char const *argv[])
         for (int i{0}; i < 50000 && !found; i++)
         {
             tempHash = reduce(tempHash, i, pwdSize);
-            std::cout << head << "," << tail << std::endl;
+            //std::cout << head << "," << tail << std::endl;
 
-            std::cout << tempHash << " vs " << tail << std::endl;
+            // std::cout << tempHash << " vs " << tail << std::endl;
             //probleme de reduction
             //probleme nb  de mdp
             if (tempHash.compare(tail) == 0)
