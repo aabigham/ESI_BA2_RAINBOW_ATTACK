@@ -3,8 +3,10 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
 
 #include "sha256.h"
+#include "passwd-utils.hpp"
 
 std::string reduce(const std::string &hash, int index, int passwdSize = 8);
 void generateTable(std::ifstream &fin, std::ofstream &fout);
@@ -67,8 +69,6 @@ int main(int argc, char const *argv[])
             //probleme nb  de mdp
             if (tempHash.compare(tail) == 0)
             {
-                std::cout << "MATCH PWD" << std::endl;
-
                 //finding the password
                 std::string currPassword = head;
                 std::string previousPassword;
@@ -78,8 +78,6 @@ int main(int argc, char const *argv[])
                     currPassword = sha256(currPassword);
                     if (currPassword.compare(currHash) == 0)
                     {
-                        std::cout << "MATCH HASH" << std::endl;
-
                         fout_crackedPwd << previousPassword << '\n';
                         found = true;
                     }
@@ -91,6 +89,8 @@ int main(int argc, char const *argv[])
         found = false;
     }
 
+    double success = rainbow::mass_check("cracked_pwd.txt", "hashes.txt");
+    std::cout << std::setprecision(4) << success << "% success" << std::endl;
     // TODO
     fin_hashes.close();
     fin_rbtable.close();

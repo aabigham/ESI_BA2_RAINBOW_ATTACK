@@ -1,8 +1,8 @@
-COMMON = random.hpp sha256.cpp passwd-utils.hpp
+COMMON = random.hpp sha256.cpp passwd-utils.hpp 
 
 all: gen-table gen-passwd check-passwd
 
-gen-table: main.cpp sha256.cpp
+gen-table: main.cpp sha256.cpp passwd-utils.hpp
 	g++ -std=c++17 -fsanitize=address -o $@ $^
 
 gen-passwd: gen-passwd.cpp $(COMMON)
