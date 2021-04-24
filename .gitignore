@@ -45,5 +45,5 @@
 # custom
 gen-passwd
 check-passwd
-gen-table
+rainbow
 *.txt
