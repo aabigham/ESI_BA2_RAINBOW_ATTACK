@@ -85,3 +85,4 @@ std::string sha256(std::string input);
         *(x) = ((uint32) * ((str) + 3)) | ((uint32) * ((str) + 2) << 8) | ((uint32) * ((str) + 1) << 16) | ((uint32) * ((str) + 0) << 24); \
     }
 #endif
+;

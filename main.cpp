@@ -9,22 +9,23 @@
 #include "passwd-utils.hpp"
 #include "ThreadPool.h"
 
+static constexpr char chars[]{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"};
 std::string reduce(const std::string &hash, int index, int passwdSize);
 
 static std::mutex mutexGen;
 void generateChain(std::string currPassword, std::ofstream &fout_table);
 void generateTable(const std::string &pwd_path, const std::string &table_path);
+void sortTable(const std::string &table_path, int size);
 
 static std::mutex mutexAttack;
-void attackRound(std::string head, std::string tail,
-                 std::string tempHash, std::string currHash,
+void attackRound(std::string head, std::string tail, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd);
 void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_path,
             const std::string &fout_crackedPwd_path);
 
 int main(int argc, char const *argv[])
 {
-    if (argc != 2 && argc != 3)
+    if (argc != 3)
     {
         std::cerr << "Wrong number of arguments.\n";
         return -1;
@@ -55,8 +56,6 @@ int main(int argc, char const *argv[])
 
 std::string reduce(const std::string &hash, int index, int passwdSize)
 {
-    static const char chars[]{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"};
-    //
     unsigned char bytes[16];
     int temp;
     for (int i = 0; i < 16; ++i)
@@ -70,7 +69,7 @@ std::string reduce(const std::string &hash, int index, int passwdSize)
     for (int j = 0; j < passwdSize; ++j)
     {
         current = bytes[(j + index) % 16];
-        reduced += chars[current % 62];
+        reduced += ::chars[current % 62];
     }
     return reduced;
 }
@@ -79,10 +78,9 @@ void generateChain(std::string currPassword, std::ofstream &fout_table)
 {
     auto pwdSize{currPassword.size()};
     std::string tail = currPassword;
-    for (int i{1}; i <= 50000; i++)
+    for (int i{0}; i < 50000; i++)
     {
-        tail = sha256(tail);
-        tail = reduce(tail, i, pwdSize);
+        tail = reduce(sha256(tail), i, pwdSize);
     }
     std::lock_guard<std::mutex> lock(::mutexGen);
     fout_table << currPassword << "," << tail << '\n';
@@ -111,12 +109,12 @@ void generateTable(const std::string &pwd_path, const std::string &table_path)
     fout_table.close();
 }
 
-void attackRound(std::string head, std::string tail,
-                 std::string tempHash, std::string currHash,
+void attackRound(std::string head, std::string tail, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd)
 {
+    std::string tempHash = currHash;
     bool found = false;
-    for (int i{50000}; i > 0 && !found; --i)
+    for (int i{0}; i < 50000 && !found; ++i)
     {
         tempHash = reduce(tempHash, i, pwdSize);
         if (tempHash.compare(tail) == 0)
@@ -124,13 +122,14 @@ void attackRound(std::string head, std::string tail,
             // Finding the password
             std::string currPassword = head;
             std::string previousPassword;
-            for (int j{1}; j <= 50000 && !found; ++j)
+            for (int j{0}; j < 50000 && !found; ++j)
             {
                 previousPassword = currPassword;
                 currPassword = sha256(currPassword);
                 if (currPassword.compare(currHash) == 0)
                 {
                     std::lock_guard<std::mutex> lock(::mutexAttack);
+                    std::cout << "found\n";
                     fout_crackedPwd << previousPassword << '\n';
                     found = true;
                 }
@@ -165,9 +164,8 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
             std::string head{strtok(&*rbLine.begin(), ",")};
             std::string tail{strtok(NULL, ",")};
             std::size_t pwdSize = head.size();
-            std::string tempHash = currHash;
-            futures.push_back(pool.enqueue(attackRound, head, tail, tempHash,
-                                           currHash, pwdSize, std::ref(fout_crackedPwd)));
+            futures.push_back(pool.enqueue(attackRound, head, tail, currHash,
+                                           pwdSize, std::ref(fout_crackedPwd)));
         }
         fin_rbtable.clear();
         fin_rbtable.seekg(0);
