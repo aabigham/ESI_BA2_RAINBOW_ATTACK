@@ -7,12 +7,15 @@
 
 #include "sha256.h"
 #include "passwd-utils.hpp"
+#include "ThreadPool.h"
 
 std::string reduce(const std::string &hash, int index, int passwdSize);
 
-void generateTable(std::ifstream &fin_pwd, std::ofstream &fout_table);
+static std::mutex mutexGen;
+void generateChain(std::string currPassword, std::ofstream &fout_table);
+void generateTable(const std::string &pwd_path, const std::string &table_path);
 
-static std::mutex mutexRound;
+static std::mutex mutexAttack;
 void attackRound(std::string head, std::string tail, bool found,
                  std::string tempHash, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd);
@@ -33,18 +36,9 @@ int main(int argc, char const *argv[])
 
     if (strcmp(argv[1], "-g") == 0)
     {
-        std::ifstream fin_pwd{argv[2]}; // Input file
-        if (fin_pwd.fail())
-        {
-            std::cerr << "Passwd file could not be opened\n";
-            return -1;
-        }
         // Generate Rainbow Table
         std::cout << "Building Rainbow table ...\n";
-        std::ofstream fout_table{"rb_table.txt"};
-        generateTable(fin_pwd, fout_table);
-        fin_pwd.close();
-        fout_table.close();
+        generateTable(argv[2], "rb_table.txt");
         std::cout << "Rainbow table generated.\n";
         // End generate
     }
@@ -95,28 +89,46 @@ std::string reduce(const std::string &hash, int index, int passwdSize)
     return reduced;
 }
 
-void generateTable(std::ifstream &fin_pwd, std::ofstream &fout_table)
+void generateChain(std::string currPassword, std::ofstream &fout_table)
 {
-    int current{0};
-    for (std::string currPassword; std::getline(fin_pwd, currPassword);)
+    auto pwdSize{currPassword.size()};
+    std::string tail = currPassword;
+    for (int i{0}; i < 50000; i++)
     {
-        auto pwdSize{currPassword.size()};
-        std::string tail = currPassword;
-        fout_table << currPassword << ',';
-        for (int i{0}; i < 50000; i++)
-        {
-            tail = sha256(tail);
-            tail = reduce(tail, i, pwdSize);
-        }
-        fout_table << tail << '\n';
+        tail = sha256(tail);
+        tail = reduce(tail, i, pwdSize);
     }
+    std::lock_guard<std::mutex> lock(mutexGen);
+    fout_table << currPassword << "," << tail << '\n';
+}
+
+void generateTable(const std::string &pwd_path, const std::string &table_path)
+{
+    std::ifstream fin_pwd{pwd_path}; // Input file
+    if (fin_pwd.fail())
+    {
+        std::cerr << "Passwd file could not be opened\n";
+        exit(1);
+    }
+    std::ofstream fout_table{"rb_table.txt"};
+
+    ThreadPool pool{std::thread::hardware_concurrency()};
+    std::vector<std::future<void>> futures;
+
+    for (std::string currPassword; std::getline(fin_pwd, currPassword);)
+        futures.push_back(pool.enqueue(generateChain, currPassword, std::ref(fout_table)));
+
+    for (const auto &f : futures)
+        f.wait();
+
+    fin_pwd.close();
+    fout_table.close();
 }
 
 void attackRound(std::string head, std::string tail, bool found,
                  std::string tempHash, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd)
 {
-    std::lock_guard<std::mutex> lock(mutexRound);
     for (int i{0}; i < 50000 && !found; i++)
     {
         tempHash = reduce(tempHash, i, pwdSize);
@@ -131,7 +143,10 @@ void attackRound(std::string head, std::string tail, bool found,
                 currPassword = sha256(currPassword);
                 if (currPassword.compare(currHash) == 0)
                 {
+                    mutexAttack.lock();
                     fout_crackedPwd << previousPassword << '\n';
+                    mutexAttack.unlock();
+
                     found = true;
                 }
                 currPassword = reduce(currPassword, j, pwdSize);
