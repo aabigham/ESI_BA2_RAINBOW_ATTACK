@@ -24,12 +24,12 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
 
 int main(int argc, char const *argv[])
 {
-    if (argc != 2 && argc != 3) // Checks the number or arguments
+    if (argc != 2 && argc != 3)
     {
         std::cerr << "Wrong number of arguments.\n";
         return -1;
     }
-    else if (strcmp(argv[1], "-g") && strcmp(argv[1], "-a")) // Checks the options
+    else if (strcmp(argv[1], "-g") && strcmp(argv[1], "-a"))
     {
         std::cerr << "Wrong options.\n";
         return -1;
@@ -37,19 +37,15 @@ int main(int argc, char const *argv[])
 
     if (strcmp(argv[1], "-g") == 0)
     {
-        // Generate Rainbow Table
         std::cout << "Building Rainbow table ...\n";
         generateTable(argv[2], "rb_table.txt");
         std::cout << "Rainbow table generated.\n";
-        // End generate
     }
     else if (strcmp(argv[1], "-a") == 0)
     {
-        // Attack
         std::cout << "Attacking Rainbow table ...\n";
         attack("hashes.txt", "rb_table.txt", "cracked_pwd.txt");
         std::cout << "Attack ended.\n";
-        // End attack
         double success = rainbow::mass_check("cracked_pwd.txt", "hashes.txt");
         std::cout << std::setprecision(4) << success << "% success" << std::endl;
     }
@@ -184,45 +180,3 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
     fin_rbtable.close();
     fout_crackedPwd.close();
 }
-
-/*int charToHexa(const char &c)
-{
-    
-    switch (c)
-    {
-    case 'a':
-        return 10;
-    case 'b':
-        return 11;
-    case 'c':
-        return 12;
-    case 'd':
-        return 13;
-    case 'e':
-        return 14;
-    case 'f':
-        return 15;
-
-    default:
-        exit(1);
-    }
-}*/
-
-/*static std::string reduce(std::string hash, int index, int passwdSize)
-{
-    static const char chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    std::string reducedPwd;
-
-    int n;
-    for (int i{0}; i < passwdSize; i++)
-    {
-        const char *curr{&hash.at(i)};
-        if (isdigit(*curr))
-            n = (((int)strtol(curr, NULL, 10) + index) % (int)std::pow(62, passwdSize));
-        else
-            n = ((charToHexa(*curr) + index) % (int)std::pow(62, passwdSize));
-
-        reducedPwd += chars[n % 62];
-    }
-    return reducedPwd;
-}*/
