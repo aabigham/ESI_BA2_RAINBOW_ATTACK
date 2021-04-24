@@ -17,7 +17,21 @@ In this exercice:
 ## Installation
 
 For this exercice, we used C++17 to code on Linux.
-TODO
+To do so, you need to install g++ ands the dependencies related to this package.
+
+To start using this project you can first:
+- Clone this repository and cd in it
+- Next, you can build the project by running: `make`
+
+## Use
+
+To generate the rainbow table, you can run (after building the project of course):
+
+`./rainbow -g <passwords_file>`
+
+To proceed the attack,  you can run:
+
+`./rainbow -a rb_table.txt`
 
 ## Members : 
 
