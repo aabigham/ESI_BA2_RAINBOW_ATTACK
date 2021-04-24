@@ -79,7 +79,7 @@ void generateChain(std::string currPassword, std::ofstream &fout_table)
 {
     auto pwdSize{currPassword.size()};
     std::string tail = currPassword;
-    for (int i{0}; i < 50000; i++)
+    for (int i{1}; i <= 50000; i++)
     {
         tail = sha256(tail);
         tail = reduce(tail, i, pwdSize);
@@ -116,7 +116,7 @@ void attackRound(std::string head, std::string tail,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd)
 {
     bool found = false;
-    for (int i{0}; i < 50000 && !found; i++)
+    for (int i{50000}; i > 0 && !found; --i)
     {
         tempHash = reduce(tempHash, i, pwdSize);
         if (tempHash.compare(tail) == 0)
@@ -124,7 +124,7 @@ void attackRound(std::string head, std::string tail,
             // Finding the password
             std::string currPassword = head;
             std::string previousPassword;
-            for (int j{0}; j < 50000 && !found; j++)
+            for (int j{1}; j <= 50000 && !found; j++)
             {
                 previousPassword = currPassword;
                 currPassword = sha256(currPassword);
