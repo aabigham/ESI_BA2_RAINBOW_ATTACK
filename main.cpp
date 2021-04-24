@@ -124,7 +124,7 @@ void attackRound(std::string head, std::string tail,
             // Finding the password
             std::string currPassword = head;
             std::string previousPassword;
-            for (int j{50000}; j > 0 && !found; --j)
+            for (int j{1}; j <= 50000 && !found; ++j)
             {
                 previousPassword = currPassword;
                 currPassword = sha256(currPassword);
