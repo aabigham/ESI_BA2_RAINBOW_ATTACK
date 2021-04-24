@@ -162,37 +162,19 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
 
     std::string currHash;
     std::string rbLine;
-    bool found = false;
-    while (std::getline(fin_hashes, currHash) && std::getline(fin_rbtable, rbLine))
+    while (std::getline(fin_hashes, currHash))
     {
-        std::string head{strtok(&*rbLine.begin(), ",")};
-        std::string tail{strtok(NULL, ",")};
-        std::size_t pwdSize = head.size();
-        std::string tempHash = currHash;
-        //futures.push_back(pool.enqueue(attackRound, head, tail, tempHash, currHash, pwdSize, std::ref(fout_crackedPwd)));
-        for (int i{0}; i < 50000 && !found; i++)
+        while (std::getline(fin_rbtable, rbLine))
         {
-            tempHash = reduce(tempHash, i, pwdSize);
-            if (tempHash.compare(tail) == 0)
-            {
-                //finding the password
-                std::string currPassword = head;
-                std::string previousPassword;
-                for (int j{0}; j < 50000 && !found; j++)
-                {
-                    previousPassword = currPassword;
-                    currPassword = sha256(currPassword);
-                    if (currPassword.compare(currHash) == 0)
-                    {
-                        fout_crackedPwd << previousPassword << '\n';
-                        found = true;
-                    }
-                    currPassword = reduce(currPassword, j, pwdSize);
-                }
-            }
-            tempHash = sha256(tempHash);
+            std::string head{strtok(&*rbLine.begin(), ",")};
+            std::string tail{strtok(NULL, ",")};
+            std::size_t pwdSize = head.size();
+            std::string tempHash = currHash;
+            futures.push_back(pool.enqueue(attackRound, head, tail, tempHash,
+                                           currHash, pwdSize, std::ref(fout_crackedPwd)));
         }
-        found = false;
+        fin_rbtable.clear();
+        fin_rbtable.seekg(0);
     }
 
     for (const auto &f : futures)
