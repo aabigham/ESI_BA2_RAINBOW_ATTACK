@@ -16,10 +16,11 @@ void generateChain(std::string currPassword, std::ofstream &fout_table);
 void generateTable(const std::string &pwd_path, const std::string &table_path);
 
 static std::mutex mutexAttack;
-void attackRound(std::string head, std::string tail, bool found,
+void attackRound(std::string head, std::string tail,
                  std::string tempHash, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd);
-void attack(std::ifstream &fin_hashes, std::ifstream &fin_rbtable, std::ofstream &fout_crackedPwd);
+void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_path,
+            const std::string &fout_crackedPwd_path);
 
 int main(int argc, char const *argv[])
 {
@@ -46,18 +47,7 @@ int main(int argc, char const *argv[])
     {
         // Attack
         std::cout << "Attacking Rainbow table ...\n";
-        std::ifstream fin_hashes{"hashes.txt"};
-        std::ifstream fin_rbtable{"rb_table.txt"};
-        if (fin_hashes.fail() || fin_rbtable.fail())
-        {
-            std::cerr << "Hash file or rainbow table file could not be opened\n";
-            return -1;
-        }
-        std::ofstream fout_crackedPwd{"cracked_pwd.txt"};
-        attack(fin_hashes, fin_rbtable, fout_crackedPwd);
-        fin_hashes.close();
-        fin_rbtable.close();
-        fout_crackedPwd.close();
+        attack("hashes.txt", "rb_table.txt", "cracked_pwd.txt");
         std::cout << "Attack ended.\n";
         // End attack
         double success = rainbow::mass_check("cracked_pwd.txt", "hashes.txt");
@@ -98,7 +88,7 @@ void generateChain(std::string currPassword, std::ofstream &fout_table)
         tail = sha256(tail);
         tail = reduce(tail, i, pwdSize);
     }
-    std::lock_guard<std::mutex> lock(mutexGen);
+    std::lock_guard<std::mutex> lock(::mutexGen);
     fout_table << currPassword << "," << tail << '\n';
 }
 
@@ -125,10 +115,11 @@ void generateTable(const std::string &pwd_path, const std::string &table_path)
     fout_table.close();
 }
 
-void attackRound(std::string head, std::string tail, bool found,
+void attackRound(std::string head, std::string tail,
                  std::string tempHash, std::string currHash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd)
 {
+    bool found = false;
     for (int i{0}; i < 50000 && !found; i++)
     {
         tempHash = reduce(tempHash, i, pwdSize);
@@ -143,41 +134,73 @@ void attackRound(std::string head, std::string tail, bool found,
                 currPassword = sha256(currPassword);
                 if (currPassword.compare(currHash) == 0)
                 {
-                    mutexAttack.lock();
+                    std::lock_guard<std::mutex> lock(::mutexAttack);
                     fout_crackedPwd << previousPassword << '\n';
-                    mutexAttack.unlock();
-
                     found = true;
                 }
                 currPassword = reduce(currPassword, j, pwdSize);
             }
         }
-        //else
-        //{
         tempHash = sha256(tempHash);
-        //}
     }
 }
 
-void attack(std::ifstream &fin_hashes, std::ifstream &fin_rbtable,
-            std::ofstream &fout_crackedPwd)
+void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_path,
+            const std::string &fout_crackedPwd_path)
 {
+    std::ifstream fin_hashes{fin_hashes_path};
+    std::ifstream fin_rbtable{fin_rbtable_path};
+    if (fin_hashes.fail() || fin_rbtable.fail())
+    {
+        std::cerr << "Hash file or rainbow table file could not be opened\n";
+        exit(1);
+    }
+    std::ofstream fout_crackedPwd{fout_crackedPwd_path};
+
+    ThreadPool pool{std::thread::hardware_concurrency()};
     std::vector<std::future<void>> futures;
-    bool found = false;
+
     std::string currHash;
     std::string rbLine;
-    int current{0};
+    bool found = false;
     while (std::getline(fin_hashes, currHash) && std::getline(fin_rbtable, rbLine))
     {
-        //std::string token = line.substr(0, pos);
         std::string head{strtok(&*rbLine.begin(), ",")};
         std::string tail{strtok(NULL, ",")};
         std::size_t pwdSize = head.size();
         std::string tempHash = currHash;
-        futures.push_back(std::async(std::launch::async, attackRound,
-                                     head, tail, found, tempHash,
-                                     currHash, pwdSize, std::ref(fout_crackedPwd)));
+        //futures.push_back(pool.enqueue(attackRound, head, tail, tempHash, currHash, pwdSize, std::ref(fout_crackedPwd)));
+        for (int i{0}; i < 50000 && !found; i++)
+        {
+            tempHash = reduce(tempHash, i, pwdSize);
+            if (tempHash.compare(tail) == 0)
+            {
+                //finding the password
+                std::string currPassword = head;
+                std::string previousPassword;
+                for (int j{0}; j < 50000 && !found; j++)
+                {
+                    previousPassword = currPassword;
+                    currPassword = sha256(currPassword);
+                    if (currPassword.compare(currHash) == 0)
+                    {
+                        fout_crackedPwd << previousPassword << '\n';
+                        found = true;
+                    }
+                    currPassword = reduce(currPassword, j, pwdSize);
+                }
+            }
+            tempHash = sha256(tempHash);
+        }
+        found = false;
     }
+
+    for (const auto &f : futures)
+        f.wait();
+
+    fin_hashes.close();
+    fin_rbtable.close();
+    fout_crackedPwd.close();
 }
 
 /*int charToHexa(const char &c)

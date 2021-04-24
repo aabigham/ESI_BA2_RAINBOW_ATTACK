@@ -1,5 +1,5 @@
 COMMON = random.hpp sha256.cpp passwd-utils.hpp 
-SRC_RAINBOW = main.cpp sha256.cpp passwd-utils.hpp
+SRC_RAINBOW = main.cpp sha256.cpp
 
 all: gen-passwd check-passwd rainbow
 
