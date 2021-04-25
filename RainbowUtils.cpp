@@ -14,6 +14,7 @@ namespace rainbow
     {
         static constexpr char chars[]{
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"};
+        //
         unsigned char bytes[16];
         int temp;
         for (int i{0}; i < 16; ++i)
@@ -37,7 +38,7 @@ namespace rainbow
         auto pwdSize{currPassword.size()};
         std::string tail = currPassword;
 
-        for (int i{0}; i < 2000; i++)
+        for (int i{0}; i < rainbow::CHAIN_SIZE; i++)
             tail = reduce(sha256(tail), i, pwdSize);
 
         std::lock_guard<std::mutex> lock(rainbow::mutexGen);
@@ -60,7 +61,7 @@ namespace rainbow
         for (std::string currPassword; std::getline(fin_pwd, currPassword);)
             futures.push_back(pool.enqueue(generateChain, currPassword, std::ref(fout_table)));
 
-        for (const auto &f : futures)
+        for (const auto &f : futures) // Waiting for the tasks
             f.wait();
 
         fin_pwd.close();
@@ -72,7 +73,7 @@ namespace rainbow
     {
         std::string tempHash = hash;
         bool found = false;
-        for (int i{0}; i < 2000 && !found; ++i)
+        for (int i{0}; i < rainbow::CHAIN_SIZE && !found; ++i)
         {
             tempHash = reduce(tempHash, i, pwdSize);
             if (tempHash.compare(tail) == 0)
@@ -81,16 +82,15 @@ namespace rainbow
                 std::string currPassword = head;
                 std::string previousPassword;
 
-                for (int j{0}; j < 2000 && !found; ++j)
+                for (int j{0}; j < rainbow::CHAIN_SIZE && !found; ++j)
                 {
                     previousPassword = currPassword;
                     currPassword = sha256(currPassword);
                     if (currPassword.compare(hash) == 0)
                     {
                         std::lock_guard<std::mutex> lock(rainbow::mutexAttack);
-                        std::cout << "found\n";
-
                         fout_crackedPwd << previousPassword << '\n';
+                        std::cout << "found" << std::endl;
                         found = true;
                     }
                     currPassword = reduce(currPassword, j, pwdSize);
@@ -110,8 +110,7 @@ namespace rainbow
             std::cerr << "Hash file or rainbow table file could not be opened\n";
             exit(1);
         }
-
-        std::ofstream fout_crackedPwd{fout_crackedPwd_path};
+        std::ofstream fout_crackedPwd{fout_crackedPwd_path}; // Found passwords
 
         ThreadPool pool{std::thread::hardware_concurrency()};
         std::vector<std::future<void>> futures;
@@ -130,16 +129,18 @@ namespace rainbow
                 futures.push_back(pool.enqueue(attackRound, currHead, currTail, currHash,
                                                pwdSize, std::ref(fout_crackedPwd)));
             }
-            fin_rbtable.clear();
+
+            // We wait for the previous tasks
+            for (const auto &f : futures)
+                f.wait();
+            futures.clear(); // Clears vector or can get to 2gib of ram
+
+            fin_rbtable.clear(); // Resetting file head
             fin_rbtable.seekg(0);
         }
-
-        for (const auto &f : futures)
-            f.wait();
 
         fin_hashes.close();
         fin_rbtable.close();
         fout_crackedPwd.close();
     }
-
 }
