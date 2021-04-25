@@ -38,7 +38,7 @@ namespace rainbow
         auto pwdSize{currPassword.size()};
         std::string tail = currPassword;
 
-        for (int i{0}; i < rainbow::CHAIN_SIZE; i++)
+        for (int i{rainbow::CHAIN_SIZE + 1}; i--;)
             tail = reduce(sha256(tail), i, pwdSize);
 
         std::lock_guard<std::mutex> lock(rainbow::mutexGen);
@@ -73,7 +73,7 @@ namespace rainbow
     {
         std::string tempHash = hash;
         bool found = false;
-        for (int i{0}; i < rainbow::CHAIN_SIZE && !found; ++i)
+        for (int i{rainbow::CHAIN_SIZE + 1}; i-- && !found;)
         {
             tempHash = reduce(tempHash, i, pwdSize);
             if (tempHash.compare(tail) == 0)
@@ -82,7 +82,7 @@ namespace rainbow
                 std::string currPassword = head;
                 std::string previousPassword;
 
-                for (int j{0}; j < rainbow::CHAIN_SIZE && !found; ++j)
+                for (int j{rainbow::CHAIN_SIZE + 1}; j-- && !found;)
                 {
                     previousPassword = currPassword;
                     currPassword = sha256(currPassword);
