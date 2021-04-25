@@ -4,6 +4,7 @@
 #include <cstring>
 #include <iomanip>
 #include <future>
+#include <string>
 
 #include "sha256.h"
 #include "passwd-utils.hpp"
@@ -35,18 +36,25 @@ int main(int argc, char const *argv[])
         return -1;
     }
 
+    const std::string rb_table_path{"rb_table.txt"};
     if (strcmp(argv[1], "-g") == 0)
     {
-        std::cout << "Building Rainbow table ...\n";
-        generateTable(argv[2], "rb_table.txt");
+        const std::string pwd_path{"pwd.txt"};
+        const std::string hashes_path{"hashes.txt"};
+        std::cout << "Generating the passwords and hashes for the table of size " << argv[2] << " ...\n";
+        rainbow::mass_generate(std::atoi(argv[2]), 6, 8, "pwd.txt", "hashes.txt");
+        std::cout << "\"" << pwd_path << " and \"" << hashes_path << "\" generated.\n\n";
+
+        std::cout << "Building Rainbow table \"" << rb_table_path << "\" ...\n";
+        generateTable(pwd_path, rb_table_path);
         std::cout << "Rainbow table generated.\n";
     }
     else if (strcmp(argv[1], "-a") == 0)
     {
-        std::cout << "Attacking Rainbow table ...\n";
-        attack("hashes.txt", "rb_table.txt", "cracked_pwd.txt");
+        std::cout << "Attacking Rainbow table \"" << rb_table_path << "\" using hashes file \"" << argv[2] << "\"...\n";
+        attack(argv[2], rb_table_path, "cracked_pwd.txt");
         std::cout << "Attack ended.\n";
-        double success = rainbow::mass_check("cracked_pwd.txt", "hashes.txt");
+        double success = rainbow::mass_check("cracked_pwd.txt", argv[2]);
         std::cout << std::setprecision(4) << success << "% success" << std::endl;
     }
 
@@ -77,10 +85,10 @@ void generateChain(std::string currPassword, std::ofstream &fout_table)
 {
     auto pwdSize{currPassword.size()};
     std::string tail = currPassword;
-    for (int i{0}; i < 50000; i++)
-    {
+
+    for (int i{0}; i < 2000; i++)
         tail = reduce(sha256(tail), i, pwdSize);
-    }
+
     std::lock_guard<std::mutex> lock(::mutexGen);
     fout_table << currPassword << "," << tail << '\n';
 }
@@ -98,7 +106,8 @@ void generateTable(const std::string &pwd_path, const std::string &table_path)
     ThreadPool pool{std::thread::hardware_concurrency()};
     std::vector<std::future<void>> futures;
 
-    for (std::string currPassword; std::getline(fin_pwd, currPassword);)
+    int i = 0;
+    for (std::string currPassword; std::getline(fin_pwd, currPassword); ++i)
         futures.push_back(pool.enqueue(generateChain, currPassword, std::ref(fout_table)));
 
     for (const auto &f : futures)
@@ -113,7 +122,7 @@ void attackRound(std::string head, std::string tail, std::string hash,
 {
     std::string tempHash = hash;
     bool found = false;
-    for (int i{0}; i < 50000 && !found; ++i)
+    for (int i{0}; i < 2000 && !found; ++i)
     {
         tempHash = reduce(tempHash, i, pwdSize);
         if (tempHash.compare(tail) == 0)
@@ -121,7 +130,8 @@ void attackRound(std::string head, std::string tail, std::string hash,
             // Finding the password
             std::string currPassword = head;
             std::string previousPassword;
-            for (int j{0}; j < 50000 && !found; ++j)
+
+            for (int j{0}; j < 2000 && !found; ++j)
             {
                 previousPassword = currPassword;
                 currPassword = sha256(currPassword);
@@ -129,6 +139,7 @@ void attackRound(std::string head, std::string tail, std::string hash,
                 {
                     std::lock_guard<std::mutex> lock(::mutexAttack);
                     std::cout << "found\n";
+
                     fout_crackedPwd << previousPassword << '\n';
                     found = true;
                 }
@@ -149,6 +160,7 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
         std::cerr << "Hash file or rainbow table file could not be opened\n";
         exit(1);
     }
+
     std::ofstream fout_crackedPwd{fout_crackedPwd_path};
 
     ThreadPool pool{std::thread::hardware_concurrency()};

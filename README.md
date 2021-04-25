@@ -27,11 +27,11 @@ To start using this project you can first:
 
 To generate the rainbow table, you can run (after building the project of course):
 
-`./rainbow -g <passwords_file>`
+`./rainbow -g <size>`, this will generate the `rb_table.txt` file of size `<size>`.
 
-To proceed the attack,  you can run:
+To proceed the attack on the previously generated table, you can run:
 
-`./rainbow -a rb_table.txt`
+`./rainbow -a <your_hashes_file.txt>`
 
 ## Members : 
 
