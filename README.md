@@ -31,7 +31,11 @@ To generate the rainbow table, you can run (after building the project of course
 
 To proceed the attack on the previously generated table, you can run:
 
-`./rainbow -a <your_hashes_file.txt>`
+`./rainbow -a <your_hashes_file.txt>`, the program will check the success at the end of the attack.
+
+To clean the project and all of the generated files, you can run:
+
+`make clean`.
 
 ## Members : 
 

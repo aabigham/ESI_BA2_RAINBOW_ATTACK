@@ -147,6 +147,7 @@ void attackRound(std::string head, std::string tail, std::string hash,
             }
         }
         tempHash = sha256(tempHash);
+        std::cout << i << std::endl;
     }
 }
 
