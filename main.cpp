@@ -15,7 +15,6 @@ std::string reduce(const std::string &hash, int index, int passwdSize);
 static std::mutex mutexGen;
 void generateChain(std::string currPassword, std::ofstream &fout_table);
 void generateTable(const std::string &pwd_path, const std::string &table_path);
-void sortTable(const std::string &table_path, int size);
 
 static std::mutex mutexAttack;
 void attackRound(std::string head, std::string tail, std::string hash,
