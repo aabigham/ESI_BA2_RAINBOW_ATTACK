@@ -27,15 +27,15 @@ To start using this project you can first:
 
 To generate the rainbow table, you can run (after building the project of course):
 
-`./rainbow -g <size>`, this will generate the `rb_table.txt` file of size `<size>`.
+- `./rainbow -g <size>`, this will generate the `rb_table.txt` file of size `<size>`.
 
 To proceed the attack on the previously generated table, you can run:
 
-`./rainbow -a <your_hashes_file.txt>`, the program will check the success at the end of the attack.
+- `./rainbow -a <your_hashes_file.txt>`, the program will check the success at the end of the attack.
 
 To clean the project and all of the generated files, you can run:
 
-`make clean`.
+- `make clean`
 
 ## Sources
 
