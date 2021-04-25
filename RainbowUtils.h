@@ -6,6 +6,7 @@
 
 namespace rainbow
 {
+    /* Wanted chain size */
     static constexpr int CHAIN_SIZE{2000};
 
     /**
@@ -46,6 +47,7 @@ namespace rainbow
      */
     void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_path,
                 const std::string &fout_crackedPwd_path);
-}
+
+} // rainbow namespace
 
 #endif
