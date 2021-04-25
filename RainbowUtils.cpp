@@ -74,28 +74,35 @@ namespace rainbow
         std::string tempHash = hash;
         bool found = false;
         for (int i{rainbow::CHAIN_SIZE + 1}; i-- && !found;)
-        {
+        { //reducing the hash to try obtain a matching password
             tempHash = reduce(tempHash, i, pwdSize);
             if (tempHash.compare(tail) == 0)
             {
-                // Finding the password
+                // Match with the reduced password and tail, so the hash does exist in the chain.
                 std::string currPassword = head;
                 std::string previousPassword;
 
                 for (int j{rainbow::CHAIN_SIZE + 1}; j-- && !found;)
                 {
+                    // Looking for the password matching that hash.
                     previousPassword = currPassword;
                     currPassword = sha256(currPassword);
+                    // Matching hash found
                     if (currPassword.compare(hash) == 0)
                     {
+                        // Locking before writing
                         std::lock_guard<std::mutex> lock(rainbow::mutexAttack);
                         fout_crackedPwd << previousPassword << '\n';
                         std::cout << "found" << std::endl;
                         found = true;
                     }
+                    /* Still reducing if not found, to go through the chain
+                        to find the password we are looking for. */
                     currPassword = reduce(currPassword, j, pwdSize);
                 }
             }
+            /* Still reducing the hash to go through the chain,
+                to find a reduction matching the tail. */
             tempHash = sha256(tempHash);
         }
     }
@@ -133,7 +140,7 @@ namespace rainbow
             // We wait for the previous tasks
             for (const auto &f : futures)
                 f.wait();
-            futures.clear(); // Clears vector or can get to 2gib of ram
+            futures.clear(); // Clears vector or can take too much memory
 
             fin_rbtable.clear(); // Resetting file head
             fin_rbtable.seekg(0);
