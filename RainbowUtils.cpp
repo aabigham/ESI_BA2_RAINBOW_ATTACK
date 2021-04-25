@@ -14,7 +14,7 @@ namespace rainbow
     {
         static constexpr char chars[]{
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"};
-        //
+        //converting string to byte
         unsigned char bytes[16];
         int temp;
         for (int i{0}; i < 16; ++i)
@@ -22,7 +22,7 @@ namespace rainbow
             std::sscanf(hash.c_str() + 2 * i, "%2x", &temp);
             bytes[i] = temp;
         }
-        //
+
         std::string reduced;
         int current;
         for (int j{0}; j < passwdSize; ++j)
@@ -50,7 +50,7 @@ namespace rainbow
         std::ifstream fin_pwd{pwd_path}; // Input file
         if (fin_pwd.fail())
         {
-            std::cerr << "Passwd file could not be opened\n";
+            std::cerr << "Password file could not be opened\n";
             exit(1);
         }
         std::ofstream fout_table{"rb_table.txt"};

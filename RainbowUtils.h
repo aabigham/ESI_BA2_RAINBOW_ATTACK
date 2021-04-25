@@ -9,7 +9,7 @@ namespace rainbow
     static constexpr int CHAIN_SIZE{2000};
 
     /**
-     * Reduction function .
+     * Reduction function.
      */
     std::string reduce(const std::string &hash, int index, int passwdSize);
 
