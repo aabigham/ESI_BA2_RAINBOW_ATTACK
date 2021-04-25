@@ -37,6 +37,10 @@ To clean the project and all of the generated files, you can run:
 
 `make clean`.
 
+## Sources
+
+You will find the different methods used in this project in the source files `RainbowUtils.h` and `RainbowUtils.cpp`. 
+
 ## Members : 
 
 - Zakaria Bendaimi 54257
