@@ -18,7 +18,7 @@ void generateTable(const std::string &pwd_path, const std::string &table_path);
 void sortTable(const std::string &table_path, int size);
 
 static std::mutex mutexAttack;
-void attackRound(std::string head, std::string tail, std::string currHash,
+void attackRound(std::string head, std::string tail, std::string hash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd);
 void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_path,
             const std::string &fout_crackedPwd_path);
@@ -109,10 +109,10 @@ void generateTable(const std::string &pwd_path, const std::string &table_path)
     fout_table.close();
 }
 
-void attackRound(std::string head, std::string tail, std::string currHash,
+void attackRound(std::string head, std::string tail, std::string hash,
                  std::size_t pwdSize, std::ofstream &fout_crackedPwd)
 {
-    std::string tempHash = currHash;
+    std::string tempHash = hash;
     bool found = false;
     for (int i{0}; i < 50000 && !found; ++i)
     {
@@ -126,7 +126,7 @@ void attackRound(std::string head, std::string tail, std::string currHash,
             {
                 previousPassword = currPassword;
                 currPassword = sha256(currPassword);
-                if (currPassword.compare(currHash) == 0)
+                if (currPassword.compare(hash) == 0)
                 {
                     std::lock_guard<std::mutex> lock(::mutexAttack);
                     std::cout << "found\n";
@@ -157,14 +157,16 @@ void attack(const std::string &fin_hashes_path, const std::string &fin_rbtable_p
 
     std::string currHash;
     std::string rbLine;
+    std::string currHead;
+    std::string currTail;
     while (std::getline(fin_hashes, currHash))
     {
         while (std::getline(fin_rbtable, rbLine))
         {
-            std::string head{strtok(&*rbLine.begin(), ",")};
-            std::string tail{strtok(NULL, ",")};
-            std::size_t pwdSize = head.size();
-            futures.push_back(pool.enqueue(attackRound, head, tail, currHash,
+            currHead = strtok(&*rbLine.begin(), ",");
+            currTail = strtok(NULL, ",");
+            std::size_t pwdSize = currHead.size();
+            futures.push_back(pool.enqueue(attackRound, currHead, currTail, currHash,
                                            pwdSize, std::ref(fout_crackedPwd)));
         }
         fin_rbtable.clear();
